@@ -21,14 +21,24 @@ namespace JsonRpc2;
  */
 class Client {
 	/**
-	 * Number of seconds before a timeout happens
+	 * @var int Number of seconds before a timeout happens
 	 */
-	const HTTP_TIMEOUT = 30;
+	public static  $__HTTP_TIMEOUT = 30;
 	
 	/**
-	 * JSON-RPC version
+	 * @var array Extra HTTP headers
 	 */
-	const JSONRPC_VERSION = "2.0";
+	public static  $__HTTP_HEADERS = array(
+		"Accept: application/json-rpc",
+		"Content-Type: application/json-rpc",
+		"X-Application: JsonRpc2-for-PHP5.3",
+		"Connection: close"
+	);
+	
+	/**
+	 * @var string JSON-RPC version
+	 */
+	public static  $__JSONRPC_VERSION = "2.0";
 	
 	/**
 	 * @var string Endpoint URL
@@ -99,7 +109,7 @@ class Client {
 	 * @param mixed $data received data
 	 * @param array $mappings assoc array with id -> ClientRequest mappings
 	 */
-	private function handleBatchRequest($data, $mappings) {
+	public function handleBatchRequest($data, $mappings) {
 		// Check if response is an array. If not, then all methods called were
 		// notifications
 		if (is_array($data)) {
@@ -117,7 +127,7 @@ class Client {
 	 * @param mixed $data received data
 	 * @param ClientRequest $request associated ClientRequest
 	 */
-	private function handleRequest($data, $request) {
+	public function handleRequest($data, $request) {
 		// If data is no array, then it probably was an notification
 		if (is_array($data)) {
 			$response = new ServerResponse($data);
@@ -141,7 +151,7 @@ class Client {
 			throw new \Exception("Could not encode data to JSON format");
 		
 		// Add extra HTTP headers
-		$headers = array();
+		$headers = Client::$__HTTP_HEADERS;
 		
 		// Add cookies, if any
 		if ($this->_useCookies && count($this->_cookieJar) > 0)
@@ -152,10 +162,12 @@ class Client {
 			"http" => array(
 				"method" => "POST",
 				"header" => implode("\r\n", $headers),
-				"timeout" => Client::HTTP_TIMEOUT,
+				"timeout" => Client::$__HTTP_TIMEOUT,
 				"content" => $content
 			)
 		);
+	
+		print_r($context);
 	
 		// Process request
 		$data = @\file_get_contents($this->_endpointUrl, false, \stream_context_create($context));
@@ -375,7 +387,7 @@ class ClientRequest {
 	 */
 	public function getStructure() {
 		return array(
-			"jsonrpc" => Client::JSONRPC_VERSION,
+			"jsonrpc" => Client::$__JSONRPC_VERSION,
 			"method" => $this->_method,
 			"params" => $this->_params,
 			"id" => $this->_id
@@ -424,7 +436,7 @@ class ServerResponse {
 	 */
 	public function __construct(array $response) {
 		// Check if response is valid
-		if (!isset($response["jsonrpc"]) && $response["jsonrpc"] != Client::JSONRPC_VERSION)
+		if (!isset($response["jsonrpc"]) && $response["jsonrpc"] != Client::$__JSONRPC_VERSION)
 			throw new \Exception("Invalid response from server");
 		
 		// Get the Id
