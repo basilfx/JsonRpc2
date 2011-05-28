@@ -167,8 +167,6 @@ class Client {
 			)
 		);
 	
-		print_r($context);
-	
 		// Process request
 		$data = @\file_get_contents($this->_endpointUrl, false, \stream_context_create($context));
 		
