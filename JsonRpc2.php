@@ -10,7 +10,7 @@
  * 
  * @author Bas Stottelaar <basstottelaar {at} gmail {dot} com>
  * @license GPLv3
- * @version 1.1
+ * @version 1.2
  */
 
 namespace JsonRpc2;
@@ -83,9 +83,13 @@ class Client {
 	 * @param array $requests batch of requests
 	 */
 	public function batchRequest(array $requests) {
+		// Check if we have to execute something
+		if (count($requests) == 0) return;
+		
 		$mappings = array();
 		$structures = array();
 		
+		// Map all requests by Id
 		foreach ($requests as $request) {
 			if (!($request instanceof ClientRequest))
 				throw new \InvalidArgumentException("Object not a ClientRequest");
