@@ -6,10 +6,12 @@ include("JsonRpc2.php");
 // Construct a new Client object and enable cookies
 $client = new JsonRpc2\Client("http://example.com/api/", true);
 
+// Attacht debugging functions to visualize ingoing and outgoing data
+JsonRpc2\Client::$__DEBUG_SEND_DATA = function($data) { echo "OUT >>> $data\n"; };
+JsonRpc2\Client::$__DEBUG_RECEIVE_DATA = function($data) { echo "IN <<< $data\n"; };
+
 // Define sample callback
-$onComplete = function($request, $response) {
-	var_dump($response->getResult());
-};
+$onComplete = function($request, $response) { var_dump($response->getResult()); };
 
 // Single request, no output
 $client->request(new JsonRpc2\ClientRequest("foo.bar"));

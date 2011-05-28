@@ -6,7 +6,7 @@ Features:
   * Fully supports JSON-RPC2.0 + HTTP extension, including batch requests and notifications. 
   * Requests can be made stateful by enabling cookies. They are automatically captured from the webserver.
   * ClientObject and ClientBatchObject, as if the requested methods existed locally
-  * Callbacks
+  * Callbacks, also for debugging purposes
 
 Required:
   * PHP5.3

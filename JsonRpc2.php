@@ -16,8 +16,7 @@
 namespace JsonRpc2;
 
 /**
- * 
- * @author basilfx
+ * The main class. Executes all requests.
  */
 class Client {
 	/**
@@ -37,6 +36,16 @@ class Client {
 	 * @var string JSON-RPC version
 	 */
 	public static  $__JSONRPC_VERSION = "2.0";
+	
+	/**
+	 * @var Closure Callback for outgoing data, debugging purpose
+	 */
+	public static $__DEBUG_SEND_DATA = null;
+	
+	/**
+	 * @var Closure Callback for incoming data, debugging purpose
+	 */
+	public static $__DEBUG_RECEIVE_DATA = null;
 	
 	/**
 	 * @var string Endpoint URL
@@ -170,8 +179,16 @@ class Client {
 			)
 		);
 		
+		// Debug outgoing data
+		$temp = Client::$__DEBUG_SEND_DATA;
+		if (is_callable($temp)) $temp($content);
+		
 		// Process request
 		$data = @\file_get_contents($this->_endpointUrl, false, \stream_context_create($context));
+		
+		// Debug ingoing data
+		$temp = Client::$__DEBUG_RECEIVE_DATA;
+		if (is_callable($temp)) $temp($data);
 		
 		// Parse HTTP headers
 		$temp = explode(" ", $http_response_header[0], 3);
