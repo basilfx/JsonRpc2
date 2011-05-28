@@ -6,11 +6,11 @@
  * 
  * Fully supports JSON-RPC2.0, including batch requests and notifications. 
  * Requests can be made stateful by enabling cookies. They are automatically
- * captured from the webserver. 
+ * captured from the webserver. It is extended with JSON-RPC-over-HTTP.
  * 
  * @author Bas Stottelaar <basstottelaar {at} gmail {dot} com>
  * @license GPLv3
- * @version 1.0
+ * @version 1.1
  */
 
 namespace JsonRpc2;
@@ -28,9 +28,7 @@ class Client {
 	/**
 	 * @var array Extra HTTP headers
 	 */
-	public static  $__HTTP_HEADERS = array(
-		"Accept: application/json-rpc",
-		"Content-Type: application/json-rpc",
+	public static  $__HTTP_EXTRA_HEADERS = array(
 		"X-Application: JsonRpc2-for-PHP5.3",
 		"Connection: close"
 	);
@@ -142,7 +140,6 @@ class Client {
 	 * @throws HttpError when server returns other status code then 200
 	 */
 	private function sendRequest(array $data, $callback) {
-		
 		// JSON Encode data
 		$content = json_encode($data);
 		
@@ -150,8 +147,13 @@ class Client {
 		if ($content === false)
 			throw new \Exception("Could not encode data to JSON format");
 		
-		// Add extra HTTP headers
-		$headers = Client::$__HTTP_HEADERS;
+		// Add custom HTTP headers
+		$headers = Client::$__HTTP_EXTRA_HEADERS;
+		
+		// Add required headers by the JSON-RPC-over-HTTP extension
+		$headers[] = "Accept: application/json-rpc";
+		$headers[] = "Content-Type: application/json-rpc"; 
+		$headers[] = "Content-length: " . strlen($content);
 		
 		// Add cookies, if any
 		if ($this->_useCookies && count($this->_cookieJar) > 0)
@@ -161,19 +163,21 @@ class Client {
 		$context = array(
 			"http" => array(
 				"method" => "POST",
+				"ignore_errors" => true,
 				"header" => implode("\r\n", $headers),
 				"timeout" => Client::$__HTTP_TIMEOUT,
 				"content" => $content
 			)
 		);
-	
+		
 		// Process request
 		$data = @\file_get_contents($this->_endpointUrl, false, \stream_context_create($context));
 		
 		// Parse HTTP headers
 		$temp = explode(" ", $http_response_header[0], 3);
 		$statusCode = (int) $temp[1];
-		if ($statusCode != 200) throw new HttpError($temp[2], $statusCode);
+		if (array_search($statusCode, array(200, 400, 404, 500)) === false) 
+			throw new HttpError($http_response_header[0], $statusCode);
 		
 		// Parse cookies, if any
 		$this->parseCookies($http_response_header);
@@ -268,8 +272,31 @@ class ClientObject {
 	 */
 	private $_depth = array();
 	
-	public function __construct(Client $client) {
+	/**
+	 * @var Closure callback when request failed
+	 */
+	private $_errorCallback = null;
+	
+	/**
+	 * @var bool whether to automatically execute the request or return it
+	 */
+	protected $_executeRequest = true;
+	
+	/**
+	 * Create a new ClientObject which will execute commands on the Clients 
+	 * which are executed on this object.
+	 * 
+	 * @param Client $client Client to execute commonds on
+	 * @param Closure $errorCallback optional callback for errors
+	 */
+	public function __construct(Client $client, $errorCallback = null) {
 		$this->_client = $client;
+		
+		// Error callback			
+		if ($errorCallback !== null && !is_callable($errorCallback))
+			throw new \InvalidArgumentException("Error callback is not callable");
+		else
+			$this->_errorCallback = $errorCallback;
 	}
 	
 	/**
@@ -282,8 +309,9 @@ class ClientObject {
 	public function __call($method, array $params) {
 		$this->_depth[] = $method;
 		$method = implode(".", $this->_depth);
+		$this->_depth = array();
 		$result = null;
-
+		
 		$request = new ClientRequest($method, $params, function($request, $response) use (&$result) {
 			if ($response->hasError()) {
 				$error = $response->getError();
@@ -291,11 +319,14 @@ class ClientObject {
 			}
 			
 			$result = $response->getResult();
-		});
-		
-		$this->_client->request($request);
-		$this->_depth = array();
-		return $result;
+		}, $this->_errorCallback);
+
+		if ($this->_executeRequest == true) {
+			$this->_client->request($request);
+			return $result;
+		} else {
+			return $request;
+		}
 	}
 	
 	/**
@@ -306,6 +337,20 @@ class ClientObject {
 	public function __get($var) {
 		$this->_depth[] = $var;
 		return $this;
+	}
+}
+
+/**
+ * Proxy wrapper for ClientObject to execute batch requests. Please note: you
+ * cannot retrieve any results but you can define a global error callback.
+ */
+class ClientBatchObject extends ClientObject {
+	/**
+	 * @see ClientProxy::__construct()
+	 */
+	public function __construct(Client $client, $errorCallback = null) {
+		$this->_executeRequest = false;
+		parent::__construct($client, $errorCallback);
 	}
 }
 

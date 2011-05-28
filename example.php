@@ -34,3 +34,14 @@ $api->foo->bar();
 
 // Print output
 var_dump($api->echo(5));
+
+// ClientBatchObject, same as above, but then for batch requests
+$batchApi = new JsonRpc2\ClientBatchObject($client);
+$batch = array(
+	$batchApi->foo->bar(),
+	$batchApi->foo->bar(),
+	$batchApi->foo->bar(),
+	$batchApi->foo->bar(),
+	$batchApi->echo(5) // Will not output anything		
+);
+$client->batchRequest($batch);

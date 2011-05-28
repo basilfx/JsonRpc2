@@ -3,9 +3,9 @@
 See example.php for a few demonstrations. Also browse the source for more info.
 
 Features:
-  * Fully supports JSON-RPC2.0, including batch requests and notifications. 
+  * Fully supports JSON-RPC2.0 + HTTP extension, including batch requests and notifications. 
   * Requests can be made stateful by enabling cookies. They are automatically captured from the webserver.
-  * ClientObject, as if the requested methods existed locally
+  * ClientObject and ClientBatchObject, as if the requested methods existed locally
   * Callbacks
 
 Required:
