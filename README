@@ -1,0 +1,11 @@
+** JSON-RPC 2.0 class for PHP5.3 **
+
+Features:
+  * Fully supports JSON-RPC2.0, including batch requests and notifications. 
+  * Requests can be made stateful by enabling cookies. They are automatically captured from the webserver.
+  * ClientObject, as if the requested methods existed locally
+  * Callbacks
+
+Required:
+  * PHP5.3
+  * Safe mode off
