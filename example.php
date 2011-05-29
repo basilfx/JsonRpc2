@@ -17,7 +17,7 @@ $onComplete = function($request, $response) { var_dump($response->getResult()); 
 $client->request(new JsonRpc2\ClientRequest("foo.bar"));
 
 // Single request with callback, prints output
-$client->request(new JsonRpc2\ClientRequest("foo.bar", array(), $onComplete));
+$client->request(new JsonRpc2\ClientRequest("foo.bar", array(), false, $onComplete));
 
 // Batch request, only last call with print something
 $client->batchRequest(array(
@@ -25,8 +25,17 @@ $client->batchRequest(array(
 	new JsonRpc2\ClientRequest("echo", array(2)),
 	new JsonRpc2\ClientRequest("echo", array(3)),
 	new JsonRpc2\ClientRequest("echo", array(4)),
-	new JsonRpc2\ClientRequest("echo", array(5), $onComplete)
+	new JsonRpc2\ClientRequest("echo", array(5), false, $onComplete)
 ));
+
+// Notification
+$client->request(new JsonRpc2\ClientRequest("notify", array(), true));
+
+// Errors will still be handeled by the error callback, if any
+$client->request(new JsonRpc2\ClientRequest("notif", array(), true)); 
+
+// Callback will not be executed!
+$client->request(new JsonRpc2\ClientRequest("notify", array(), true, $onComplete)); 
 
 // ClientObject, as if the implementation were client side
 $api = new JsonRpc2\ClientObject($client);

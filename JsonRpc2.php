@@ -11,6 +11,7 @@
  * @author Bas Stottelaar <basstottelaar {at} gmail {dot} com>
  * @license GPLv3
  * @version 1.2
+ * @see https://www.github.com/basilfx/jsonrpc2
  */
 
 namespace JsonRpc2;
@@ -94,7 +95,7 @@ class Client {
 			if (!($request instanceof ClientRequest))
 				throw new \InvalidArgumentException("Object not a ClientRequest");
 			
-			// Add to array
+			// Add to array for post processing
 			$mappings[$request->getId()] = $request;
 			$structures[] = $request->getStructure();
 		}
@@ -130,6 +131,11 @@ class Client {
 				$clientRequest = $mappings[$response->getId()];
 				$clientRequest->complete($response);
 			}
+		} else {
+			// If we have no mappings, then all requests were notifications.
+			// Notifications must have empty responses.
+			if (count($mappings) > 0)
+				throw \Exception("Sent batch request, but response is not an array!");
 		}
 	}
 	
@@ -139,10 +145,13 @@ class Client {
 	 * @param ClientRequest $request associated ClientRequest
 	 */
 	public function handleRequest($data, $request) {
-		// If data is no array, then it probably was an notification
+		// Parse data
 		if (is_array($data)) {
 			$response = new ServerResponse($data);
 			$request->complete($response);
+		} else {
+			if (!$request->isNotification())  
+				throw \Exception("Sent a request, but received invalid data!");
 		}
 	}
 	
@@ -197,7 +206,7 @@ class Client {
 		// Parse HTTP headers
 		$temp = explode(" ", $http_response_header[0], 3);
 		$statusCode = (int) $temp[1];
-		if (array_search($statusCode, array(200, 400, 404, 500)) === false) 
+		if (array_search($statusCode, array(200, 204, 400, 404, 500)) === false) 
 			throw new HttpError($http_response_header[0], $statusCode);
 		
 		// Parse cookies, if any
@@ -206,13 +215,9 @@ class Client {
 		// Check for errors
 		if ($data === false)
 			throw new \Exception("Could not execute request.");
-			
-		// Now try to decode data
-		$data = \json_decode($data, true);
 		
-		// Check if decoding succeeded
-		if ($data === false)
-			throw new \Exception("Could not decode server data");
+		// Now try to decode data, but let the callback decide if it went well
+		$data = \json_decode($data, true);
 		
 		// Call the next function in the chain	
 		$callback($data);
@@ -333,7 +338,7 @@ class ClientObject {
 		$this->_depth = array();
 		$result = null;
 		
-		$request = new ClientRequest($method, $params, function($request, $response) use (&$result) {
+		$request = new ClientRequest($method, $params, false, function($request, $response) use (&$result) {
 			if ($response->hasError()) {
 				$error = $response->getError();
 				throw new RemoteError($error, $error->getMessage(), $error->getCode());
@@ -390,9 +395,14 @@ class ClientRequest {
 	private $_params = null;
 	
 	/**
-	 * string request id, generated
+	 * @var string request id, generated
 	 */
 	private $_id = null;
+	
+	/**
+	 * @var bool is this request a notification?
+	 */
+	private $_isNotification = null;
 	
 	/**
 	 * @var Closure callback when request is completed and returned data
@@ -405,24 +415,27 @@ class ClientRequest {
 	private $_errorCallback = null;
 	
 	/**
-	 * Construct a new client request. Automatically generates an Id.
+	 * Construct a new client request or client notification
 	 * 
 	 * Callbacks can be associated with this request. They will be called
 	 * automatically when a request is completed or has errors. Please note:
 	 * if a response does not contain an Id, the callbacks cannot be found. 
-	 * Also, notifications do not return any data and therefore, callbacks
-	 * will not be executed 
+	 * 
+	 * The complete callback will only be called when this request is not 
+	 * marked as a notification. 
 	 * 
 	 * @param string $method method to call
 	 * @param array $params additional parameters
+	 * @param bool $isNotifcation mark this request as a notification
 	 * @param Closure $completeCallback callback
 	 * @param Closure $errorCallback callback
 	 */
-	public function __construct($method, array $params = array(), $completeCallback = null, $errorCallback = null) {
+	public function __construct($method, array $params = array(), $isNotification = false, $completeCallback = null, $errorCallback = null) {
 		// Required request parameters
 		$this->_method = $method;
 		$this->_params = $params;
-		$this->_id = md5(uniqid(microtime( true ), true));
+		$this->_id = md5(uniqid(microtime(true), true));
+		$this->_isNotification = $isNotification;
 		
 		// Complete callback
 		if ($completeCallback !== null && !is_callable($completeCallback))
@@ -446,20 +459,35 @@ class ClientRequest {
 	}
 	
 	/**
+	 * Return true if this request is a notification
+	 * @return boolean
+	 */
+	public function isNotification() {
+		return $this->_isNotification;
+	}
+	
+	/**
 	 * Build structure to represent JSON-RPC request
 	 * @return array
 	 */
 	public function getStructure() {
-		return array(
+		$result = array(
 			"jsonrpc" => Client::$__JSONRPC_VERSION,
 			"method" => $this->_method,
-			"params" => $this->_params,
-			"id" => $this->_id
+			"params" => $this->_params
 		);	
+		
+		// Notification or a normal request?
+		if ($this->_isNotification === false) $result["id"] = $this->_id;
+		
+		return $result;
 	}
 	
 	/**
-	 * Method which gets called by Client when data is received
+	 * Method which gets called by Client when a request is finished. 
+	 * 
+	 * Note: when a notification is requested, the complete callback will not
+	 * be invoked, only the error callback.
 	 * @param ServerResponse $data
 	 */
 	public function complete(ServerResponse $data) {
@@ -468,7 +496,7 @@ class ClientRequest {
 			$callback($this, $error);
 		}
 		
-		if ($this->_completeCallback != null) {
+		if ($this->_isNotification === false && $this->_completeCallback != null) {
 			$callback = $this->_completeCallback;
 			$callback($this, $data);
 		}
@@ -499,17 +527,18 @@ class ServerResponse {
 	 * @param array $response server response
 	 */
 	public function __construct(array $response) {
-		// Check if response is valid
-		if (!isset($response["jsonrpc"]) && $response["jsonrpc"] != Client::$__JSONRPC_VERSION)
-			throw new \Exception("Invalid response from server");
-		
 		// Get the Id
 		$this->_id = $response["id"];
 
-		if (isset($response["error"])) // An error happened 
+		if (isset($response["error"])) { // An error happened 
 			$this->_error = new ServerResponseError($response["error"]);
-		else // No, just some results
+		} else { // No, just some results
+			// Check if response is valid
+			if (!isset($response["jsonrpc"]) && $response["jsonrpc"] != Client::$__JSONRPC_VERSION)
+				throw new \Exception("Invalid response from server");
+				
 			$this->_result = $response["result"]; 
+		}
 	}
 	
 	/**
