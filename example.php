@@ -58,8 +58,8 @@ $batch = array(
 $client->batchRequest($batch);
 
 // ProxyBatchObject, the easy way. $batchApi will schedule requests automatically
-$batchApi->foo->bar(1),
-$batchApi->foo->bar(2),
-$batchApi->foo->bar(3),
+$batchApi->foo->bar(1);
+$batchApi->foo->bar(2);
+$batchApi->foo->bar(3);
 $client->batchRequest(); // Commit the above 3 commands
 
