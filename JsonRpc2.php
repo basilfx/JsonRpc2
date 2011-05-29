@@ -224,7 +224,7 @@ class Client {
 		// Process request
 		$data = @\file_get_contents($this->_endpointUrl, false, \stream_context_create($context));
 		
-		// Debug ingoing data
+		// Debug incoming data
 		$temp = Client::$__DEBUG_RECEIVE_DATA;
 		if (is_callable($temp)) $temp($data);
 		
@@ -252,21 +252,16 @@ class Client {
 	 * Build a string suitable for the Cookie header
 	 */
 	private function buildCookies() {
-		$removes = array();
 		$cookies = array();
 		
-		// Parse all cookies, check them if they aren't expired
-		foreach ($this->_cookieJar as $key => $cookie) {
-			if (isset($cookie["data"]["expires"]) && time() > $cookie["data"]["expires"]) {
-				$remove[] = $key;
-				continue;
-			}
-			
-			$cookies[] = "$key={$cookie["value"]}";
-		}
+		// Filter expired cookies
+		$this->_cookieJar = array_filter($this->_cookieJar, function($cookie) {
+			return !isset($cookie["data"]["expires"]) || $cookie["data"]["expires"] > time();
+		});
 		
-		// Cleanup expired cookies
-		foreach ($removes as $remove) unset($this->_cookieJar[$remove]);
+		// Parse all cookies, check them if they aren't expired
+		foreach ($this->_cookieJar as $key => $cookie)
+			$cookies[] = "$key={$cookie["value"]}";
 		
 		// Done
 		return implode("; ", $cookies);
