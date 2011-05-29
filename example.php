@@ -37,8 +37,8 @@ $client->request(new JsonRpc2\ClientRequest("notif", array(), true));
 // Callback will not be executed!
 $client->request(new JsonRpc2\ClientRequest("notify", array(), true, $onComplete)); 
 
-// ClientObject, as if the implementation were client side
-$api = new JsonRpc2\ClientObject($client);
+// ProxyObject, as if the implementation were client side
+$api = new JsonRpc2\ProxyObject($client);
 
 // Simple usage
 $api->foo->bar();
@@ -46,8 +46,8 @@ $api->foo->bar();
 // Print output
 var_dump($api->echo(5));
 
-// ClientBatchObject, same as above, but then for batch requests
-$batchApi = new JsonRpc2\ClientBatchObject($client);
+// ProxyBatchObject, same as above, but then for batch requests
+$batchApi = new JsonRpc2\ProxyBatchObject($client);
 $batch = array(
 	$batchApi->foo->bar(),
 	$batchApi->foo->bar(),
@@ -56,3 +56,10 @@ $batch = array(
 	$batchApi->echo(5) // Will not output anything		
 );
 $client->batchRequest($batch);
+
+// ProxyBatchObject, the easy way. $batchApi will schedule requests automatically
+$batchApi->foo->bar(1),
+$batchApi->foo->bar(2),
+$batchApi->foo->bar(3),
+$client->batchRequest(); // Commit the above 3 commands
+

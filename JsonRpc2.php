@@ -1,7 +1,7 @@
 <?php 
 /**
  * JSON-RPC 2.0 class for PHP5.3. Does not require cURL-lib and uses closures
- * to associate callbacks. Also provides a ClientObject to simplify requests
+ * to associate callbacks. Also provides a ProxyObject to simplify requests
  * to the server, as if it were local implementations
  * 
  * Fully supports JSON-RPC2.0, including batch requests and notifications. 
@@ -10,7 +10,7 @@
  * 
  * @author Bas Stottelaar <basstottelaar {at} gmail {dot} com>
  * @license GPLv3
- * @version 1.2
+ * @version 1.3
  * @see https://www.github.com/basilfx/jsonrpc2
  */
 
@@ -64,6 +64,11 @@ class Client {
 	private $_useCookies = true;
 	
 	/**
+	 * @var array list of requests
+	 */
+	private $_batch = array();
+	
+	/**
 	 * Initialize a new Client object with a given endpoint URL. 
 	 * 
 	 * Cookies can be enabled to make requests stateful.
@@ -80,10 +85,30 @@ class Client {
 	}
 	
 	/**
-	 * Perform a batch request
+	 * Add a request to the schedule list
+	 * @param ClientRequest $request request to schedule
+	 */
+	public function scheduleRequest(ClientRequest $request) {
+		$this->_batch[] = $request;
+	}
+	
+	/**
+	 * Perform a batch request.
+	 * 
+	 * If no array of requests is given, it will execute the scheduled 
+	 * requests. Scheduled requests will alway be cleared, even if an
+	 * array of requests is given.
+	 * 
 	 * @param array $requests batch of requests
 	 */
-	public function batchRequest(array $requests) {
+	public function batchRequest(array $requests = null) {
+		// If we do not specify any requests, then execute scheduled batch
+		if ($requests === null) 
+			$requests = $this->_batch;
+		
+		// Clear the scheduled requests, even if we do not execute them
+		$this->_batch = array();
+		
 		// Check if we have to execute something
 		if (count($requests) == 0) return;
 		
@@ -287,7 +312,7 @@ class Client {
 /**
  * Represents a proxy between the remote API en the user implementation.
  */
-class ClientObject {
+class ProxyObject {
 	/**
 	 * @var Client client object to perform requests with
 	 */
@@ -304,19 +329,30 @@ class ClientObject {
 	private $_errorCallback = null;
 	
 	/**
+	 * @var Closure callback when request completed
+	 */
+	private $_completeCallback = null;
+	
+	/**
 	 * @var bool whether to automatically execute the request or return it
 	 */
 	protected $_executeRequest = true;
 	
 	/**
-	 * Create a new ClientObject which will execute commands on the Clients 
+	 * Create a new ProxyObject which will execute commands on the Clients 
 	 * which are executed on this object.
 	 * 
 	 * @param Client $client Client to execute commonds on
 	 * @param Closure $errorCallback optional callback for errors
 	 */
-	public function __construct(Client $client, $errorCallback = null) {
+	public function __construct(Client $client, $completeCallback = null, $errorCallback = null) {
 		$this->_client = $client;
+		
+		// Complete callback			
+		if ($completeCallback !== null && !is_callable($completeCallback))
+			throw new \InvalidArgumentException("Complete callback is not callable");
+		else
+			$this->_completeCallback = $completeCallback;
 		
 		// Error callback			
 		if ($errorCallback !== null && !is_callable($errorCallback))
@@ -337,20 +373,27 @@ class ClientObject {
 		$method = implode(".", $this->_depth);
 		$this->_depth = array();
 		$result = null;
+		$completeCallback = $this->_completeCallback;
 		
-		$request = new ClientRequest($method, $params, false, function($request, $response) use (&$result) {
+		$request = new ClientRequest($method, $params, false, function($request, $response) use (&$result, $completeCallback) {
 			if ($response->hasError()) {
 				$error = $response->getError();
 				throw new RemoteError($error, $error->getMessage(), $error->getCode());
 			}
 			
+			// Execute associated callback
+			if ($completeCallback !== null) $completeCallback($request, $response);
+
+			// Save response
 			$result = $response->getResult();
 		}, $this->_errorCallback);
 
+		// Decide what to do
 		if ($this->_executeRequest == true) {
 			$this->_client->request($request);
 			return $result;
 		} else {
+			$this->_client->scheduleRequest($request);
 			return $request;
 		}
 	}
@@ -367,16 +410,17 @@ class ClientObject {
 }
 
 /**
- * Proxy wrapper for ClientObject to execute batch requests. Please note: you
- * cannot retrieve any results but you can define a global error callback.
+ * Proxy wrapper for ProxyObject to execute batch requests. Requests will 
+ * be scheduled in the Client and executed when you invoke 
+ * Client::batchRequest().
  */
-class ClientBatchObject extends ClientObject {
+class ProxyBatchObject extends ProxyObject {
 	/**
-	 * @see ClientProxy::__construct()
+	 * @see ProxyObject::__construct()
 	 */
-	public function __construct(Client $client, $errorCallback = null) {
+	public function __construct(Client $client, $completeCallback = null, $errorCallback = null) {
 		$this->_executeRequest = false;
-		parent::__construct($client, $errorCallback);
+		parent::__construct($client, $completeCallback, $errorCallback);
 	}
 }
 
@@ -456,6 +500,23 @@ class ClientRequest {
 	 */
 	public function getId() {
 		return $this->_id;
+	}
+	
+	/**
+	 * Return all parameters
+	 * @return array 
+	 */
+	public function getParameters() {
+		return $this->_params;
+	}
+	
+	/**
+	 * Return parameter by key
+	 * @param mixed $key
+	 * @return array
+	 */
+	public function getParameter($key) {
+		return $this->_params[$key];
 	}
 	
 	/**
