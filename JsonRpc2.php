@@ -8,8 +8,8 @@
  * Requests can be made stateful by enabling cookies. They are automatically
  * captured from the webserver. It is extended with JSON-RPC-over-HTTP.
  * 
- * @author Bas Stottelaar <basstottelaar {at} gmail {dot} com>
- * @license GPLv3
+ * @author Bas Stottelaar <http://github.com/basilfx>
+ * @license MIT
  * @version 1.3
  * @see https://www.github.com/basilfx/jsonrpc2
  */
@@ -76,7 +76,7 @@ class Client {
 	 * @param string $endpointUrl
 	 * @param bool $useCookies
 	 */
-	public function __construct($endpointUrl, $useCookies = true) {
+	public function __construct($endpointUrl, $useCookies = false) {
 		if (parse_url($endpointUrl) === false)
 			throw new \InvalidArgumentException("Malformed endpoint given");
 		
